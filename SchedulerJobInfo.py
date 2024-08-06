@@ -44,296 +44,153 @@ class SchedulerJobInfo:
     '''
     def __init__(self,
         # Required fields
-        job_id:int,
-        num_cores:int,
-        max_mem_gb:float,
-        num_hosts:int,
-        submit_time:str,
-        start_time:str,
-        finish_time:str,
+        JobID:int,
+        NCPUS:int,
+        ReqMemGB:float,
+        AllocNodes:int,
+        Submit:str,
+        Start:str,
+        End:str,
 
         # Optional fields
-        ineligible_pend_time:str=None,
-        eligible_time:str=None,
-        requeue_time:str=None,
-        wait_time:str=None,
-        run_time:str=None,
-        timelimit:str=None,
+        # ineligible_pend_time:str=None,
+        Eligible:str=None,
+        # requeue_time:str=None,
+        # wait_time:str=None,
+        Elapsed:str=None,
+        Timelimit:str=None,
 
-        state:str=None,
-        reason:str=None,
-        user:str=None,
-        queue:str=None,
-        node_list:str=None,
-        project:str=None,
-        licenses:str=None,
+        State:str=None,
+        Reason:str=None,
+        User:str=None,
+        Partition:str=None,
+        NodeList:str=None,
+        Account:str=None,
+        # licenses:str=None,
 
-        exit_status:int=None,
+        # exit_status:int=None,
+        ExitCode:str=None,
 
-        ru_inblock:int=None,
-        ru_majflt:int=None,
-        ru_maxrss:int=None,
-        ru_minflt:int=None,
-        ru_msgrcv:int=None,
-        ru_msgsnd:int=None,
-        ru_nswap:int=None,
-        ru_oublock:int=None,
-        ru_stime:float=None,
-        ru_utime:float=None,
-        ru_ttime:float=None,
+        MaxDiskRead:int=None,
+        MaxPages:int=None,
+        # ru_maxrss:int=None,
+        MaxRSS:int=None,
+        # ru_msgrcv:int=None,
+        # ru_msgsnd:int=None,
+        # ru_nswap:int=None,
+        MaxDiskWrite:int=None,
+        SystemCPU:float=None,
+        UserCPU:float=None,
+        TotalCPU:float=None,
 
-        # Put resource_request at end because can contain ',' which is also the CSV separator
-        resource_request:str='',
+        # Put Constraints at end because can contain ',' which is also the CSV separator
+        Constraints:str='',
         ):
-        '''
-        Constructor
 
-        datetime fields can be passed as a timestamp or in ISO format.
-        The arg is checked by trying to create a datetime object.
-
-        timedelta fields can be passed as an integer number of seconds or in the following format: `[DD-[HH:]]MM:SS`.
-        The arg is checked by trying to create a timedelta object.
-
-        If an arg is the wrong time and can't be converted then a ValueError exception is raised.
-
-        Args:
-            job_id (int): Unique Job Id
-            num_cores (int): Number of cores requested for the job. This is the total number across all hosts/nodes.
-            max_mem_gb (float): Amount of memory requested by the job. This is the total number across all hosts/nodes.
-            num_hosts (int): Number of compute nodes requested by the job
-            submit_time (str): Date and time that the job was submitted.
-            start_time (str): Date and time that the job started on the compute node
-            finish_time (str): Date and time that the job finished.
-            timelimit (str): Time limit of job.
-
-            ineligible_pend_time (str): LSF: The time that the job was pending because it was ineligible to run because of unmet dependencies
-            eligible_time (str): Slurm: Date and time when the job became eligible to run. Can be used to calculate ineligible_pend_time.
-            requeue_time (str): LSF: The job's requeue time.
-            wait_time (str): The time that the job waited to start after it was eligible.
-            run_time (str): The time that the job ran. It should be the difference between finish_time and start_time.
-
-            state (str): Job state
-            reason (str): reason for block
-            user (str): user that submitted job.
-            queue (str): queue that the job was submitted to.
-            project (str): project that the job belongs to
-            licenses (str): comma separated list of licenses used by the job. Format: license1[:int][license2[:int]]
-
-            exit_status (int):
-
-            ru_inblock (int):
-            ru_majflt (int):
-            ru_maxrss (int):
-            ru_minflt (int):
-            ru_msgrcv (int):
-            ru_msgsnd (int):
-            ru_nswap (int):
-            ru_oublock (int):
-            ru_stime (int):
-            ru_utime (int):
-            ru_ttime (int):
-
-            resource_request (str): Additional resources requested by the job, for example, licenses
-
-        Returns:
-            `SchedulerJobInfo`
-
-        Raises:
-            ValueError: If arg can't be converted to the required type.
-        '''
         # Required fields
-        self.job_id = job_id
-        self.num_cores = num_cores
-        self.max_mem_gb = max_mem_gb
-        self.num_hosts = num_hosts
-        (self.submit_time, self.submit_time_dt) = SchedulerJobInfo.fix_datetime(submit_time)
-        (self.start_time, self.start_time_dt) = SchedulerJobInfo.fix_datetime(start_time)
-        (self.finish_time, self.finish_time_dt) = SchedulerJobInfo.fix_datetime(finish_time)
-        (self.timelimit, self.timelimit_td) = SchedulerJobInfo.fix_duration(timelimit)
+        self.JobID = JobID
+        self.NCPUS = NCPUS
+        self.ReqMemGB = ReqMemGB
+        self.AllocNodes = AllocNodes
+        (self.Submit, self.Submit_dt) = SchedulerJobInfo.fix_datetime(Submit)
+        if Start is None:
+            print(SchedulerJobInfo.fix_datetime(Start))
+            raise Exception('review')
+        (self.Start, self.Start_dt) = SchedulerJobInfo.fix_datetime(Start)
+        (self.End, self.End_dt) = SchedulerJobInfo.fix_datetime(End)
+        (self.Timelimit, self.Timelimit_td) = SchedulerJobInfo.fix_duration(Timelimit)
 
         # Optional fields
+        # try:
+        #     (self.ineligible_pend_time, self.ineligible_pend_time_td) = SchedulerJobInfo.fix_duration(ineligible_pend_time)
+        # except Exception:
+        #     logger.warning(f"Invalid ineligible_pend_time: {ineligible_pend_time}")
+        #     self.ineligible_pend_time = self.ineligible_pend_time_td = None
         try:
-            (self.ineligible_pend_time, self.ineligible_pend_time_td) = SchedulerJobInfo.fix_duration(ineligible_pend_time)
-        except:
-            logger.warning(f"Invalid ineligible_pend_time: {ineligible_pend_time}")
-            self.ineligible_pend_time = self.ineligible_pend_time_td = None
+            (self.Eligible, self.Eligible_dt) = SchedulerJobInfo.fix_datetime(Eligible)
+        except Exception:
+            logger.warning(f"Invalid eligible: {Eligible}")
+            self.Eligible = self.Eligible_dt = None
+        # try:
+        #     (self.requeue_time, self.requeue_time_td) = SchedulerJobInfo.fix_duration(requeue_time)
+        # except Exception:
+        #     logger.warning(f"Invalid requeue_time: {requeue_time}")
+        #     self.requeue_time = self.requeue_time_td = None
+        # try:
+        #     (self.wait_time, self.wait_time_td) = SchedulerJobInfo.fix_duration(wait_time)
+        # except Exception:
+        #     logger.warning(f"Invalid wait_time: {wait_time}")
+        #     self.wait_time = self.wait_time_td = None
         try:
-            (self.eligible_time, self.eligible_time_dt) = SchedulerJobInfo.fix_datetime(eligible_time)
-        except:
-            logger.warning(f"Invalid eligible_time: {eligible_time}")
-            self.eligible_time = self.eligible_time_dt = None
-        try:
-            (self.requeue_time, self.requeue_time_td) = SchedulerJobInfo.fix_duration(requeue_time)
-        except:
-            logger.warning(f"Invalid requeue_time: {requeue_time}")
-            self.requeue_time = self.requeue_time_td = None
-        try:
-            (self.wait_time, self.wait_time_td) = SchedulerJobInfo.fix_duration(wait_time)
-        except:
-            logger.warning(f"Invalid wait_time: {wait_time}")
-            self.wait_time = self.wait_time_td = None
-        try:
-            (self.run_time, self.run_time_td) = SchedulerJobInfo.fix_duration(run_time)
-        except:
-            logger.warning(f"Invalid run_time: {run_time}")
-            self.run_time = self.run_time_td = None
+            (self.Elapsed, self.Elapsed_td) = SchedulerJobInfo.fix_duration(Elapsed)
+        except Exception:
+            logger.warning(f"Invalid elapsed: {Elapsed}")
+            self.Elapsed = self.Elapsed_td = None
 
-        self.state = state
-        self.reason = reason
-        self.user = user
-        self.queue = queue
-        self.node_list = node_list
-        self.project = project
-        self.licenses = licenses
+        self.State = State
+        self.Reason = Reason
+        self.User = User
+        self.Partition = Partition
+        self.NodeList = NodeList
+        self.Account = Account
+        # self.licenses = licenses
 
-        self.exit_status = SchedulerJobInfo.fix_int(exit_status)
+        self.ExitCode = ExitCode
 
-        self.ru_inblock = SchedulerJobInfo.fix_int(ru_inblock)
-        self.ru_majflt = SchedulerJobInfo.fix_int(ru_majflt)
-        self.ru_maxrss = SchedulerJobInfo.fix_int(ru_maxrss)
-        self.ru_minflt = SchedulerJobInfo.fix_int(ru_minflt)
-        self.ru_msgrcv = SchedulerJobInfo.fix_int(ru_msgrcv)
-        self.ru_msgsnd = SchedulerJobInfo.fix_int(ru_msgsnd)
-        self.ru_nswap = SchedulerJobInfo.fix_int(ru_nswap)
-        self.ru_oublock = SchedulerJobInfo.fix_int(ru_oublock)
-        (self.ru_stime, self.ru_stime_td) = SchedulerJobInfo.fix_duration(ru_stime)
-        (self.ru_utime, self.ru_utime_td) = SchedulerJobInfo.fix_duration(ru_utime)
-        (self.ru_ttime, self.ru_ttime_td) = SchedulerJobInfo.fix_duration(ru_ttime)
+        self.MaxDiskRead = MaxDiskRead
+        self.MaxPages = MaxPages
+        # self.ru_maxrss = ru_maxrss
+        self.MaxRSS = MaxRSS
+        # self.ru_msgrcv = ru_msgrcv
+        # self.ru_msgsnd = ru_msgsnd
+        # self.ru_nswap = ru_nswap
+        self.MaxDiskWrite = MaxDiskWrite
+        (self.SystemCPU, self.SystemCPU_td) = SchedulerJobInfo.fix_duration(SystemCPU)
+        (self.UserCPU, self.UserCPU_td) = SchedulerJobInfo.fix_duration(UserCPU)
+        (self.TotalCPU, self.TotalCPU_td) = SchedulerJobInfo.fix_duration(TotalCPU)
 
-        self.resource_request = resource_request
+        self.Constraints = Constraints
 
-        if not self.ineligible_pend_time:
-            if self.eligible_time:
-                self.ineligible_pend_time_td = self.eligible_time_dt - self.submit_time_dt
-                self.ineligible_pend_time = timedelta_to_string(self.ineligible_pend_time_td)
-            else:
-                (self.ineligible_pend_time, self.ineligible_pend_time_td) = SchedulerJobInfo.fix_duration("00:00")
-        if not self.eligible_time:
-            if self.ineligible_pend_time:
-                self.eligible_time_dt = self.submit_time_dt + self.ineligible_pend_time_td
-                self.eligible_time = datetime_to_str(self.eligible_time_dt)
-            else:
-                self.eligible_time = self.submit_time
-                self.eligible_time_dt = self.submit_time_dt
+        # if not self.ineligible_pend_time:
+        #     if self.Eligible:
+        #         self.ineligible_pend_time_td = self.Eligible_dt - self.Submit_dt
+        #         self.ineligible_pend_time = timedelta_to_string(self.ineligible_pend_time_td)
+        #     else:
+        #         (self.ineligible_pend_time, self.ineligible_pend_time_td) = SchedulerJobInfo.fix_duration("00:00")
+        if not self.Eligible:
+            # if self.ineligible_pend_time:
+            #     self.Eligible_dt = self.Submit_dt + self.ineligible_pend_time_td
+            #     self.Eligible = datetime_to_str(self.Eligible_dt)
+            # else:
+            self.Eligible = self.Submit
+            self.Eligible_dt = self.Submit_dt
 
-        # Bug 31 saved the start_time even if it was 0 and less than submit time.
+        # Bug 31 saved the start even if it was 0 and less than Submit time.
         # Check for this condition and set the start time to the eligible time
-        if self.start_time_dt < self.submit_time_dt:
-            self.start_time = self.eligible_time
-            self.start_time_dt = self.eligible_time_dt
+        if self.Start_dt < self.Submit_dt:
+            self.Start = self.Eligible
+            self.Start_dt = self.Eligible_dt
 
-        # Bug 22 incorrectly calculated the wait_time using start_time instead of submit_time so just always calculate it so it's correct.
-        self.wait_time_td = self.start_time_dt - self.eligible_time_dt
-        self.wait_time = timedelta_to_string(self.wait_time_td)
+        # # Bug 22 incorrectly calculated the wait_time using start instead of Submit so just always calculate it so it's correct.
+        # self.wait_time_td = self.start_dt - self.Eligible_dt
+        # self.wait_time = timedelta_to_string(self.wait_time_td)
 
-        if (not self.run_time) and self.finish_time_dt:
-            self.run_time_td = self.finish_time_dt - self.start_time_dt
-            self.run_time = timedelta_to_string(self.run_time_td)
+        if (not self.Elapsed) and self.End_dt:
+            self.Elapsed_td = self.End_dt - self.Start_dt
+            self.Elapsed = timedelta_to_string(self.Elapsed_td)
 
-    @staticmethod
-    def from_dict(field_dict: dict):
-        job_id = int(field_dict['job_id'])
-        num_cores = int(field_dict['num_cores'])
-        max_mem_gb = float(field_dict['max_mem_gb'])
-        num_hosts = int(field_dict['num_hosts'])
-        submit_time = str(field_dict['submit_time'])
-        start_time = str(field_dict['start_time'])
-        finish_time = str(field_dict['finish_time'])
-        timelimit = str(field_dict['timelimit'])
-
-        ineligible_pend_time = str(field_dict['ineligible_pend_time'])
-        eligible_time = str(field_dict['eligible_time'])
-        requeue_time = str(field_dict['requeue_time'])
-        wait_time = str(field_dict['wait_time'])
-        run_time = str(field_dict['run_time'])
-
-        state = int(field_dict['state'])
-        reason = field_dict['reason']
-        user = field_dict.get('user', None)
-        queue = field_dict.get('queue', None)
-        node_list = field_dict.get('node_list', None)
-        project = field_dict.get('project', None)
-        licenses = field_dict.get('licensese', None)
-
-        exit_status = SchedulerJobInfo.fix_int(field_dict['exit_status'])
-
-        ru_inblock = SchedulerJobInfo.fix_int(field_dict['ru_inblock'])
-        ru_majflt = SchedulerJobInfo.fix_int(field_dict['ru_majflt'])
-        ru_maxrss = SchedulerJobInfo.fix_int(field_dict['ru_maxrss'])
-        ru_minflt = SchedulerJobInfo.fix_int(field_dict['ru_minflt'])
-        ru_msgrcv = SchedulerJobInfo.fix_int(field_dict['ru_msgrcv'])
-        ru_msgsnd = SchedulerJobInfo.fix_int(field_dict['ru_msgsnd'])
-        ru_nswap = SchedulerJobInfo.fix_int(field_dict['ru_nswap'])
-        ru_oublock = SchedulerJobInfo.fix_int(field_dict['ru_oublock'])
-        ru_stime = str(field_dict['ru_stime'])
-        ru_utime = str(field_dict['ru_utime'])
-        ru_ttime = str(field_dict['ru_ttime'])
-
-        resource_request = str(field_dict['resource_request'])
-
-        return SchedulerJobInfo(
-            job_id = job_id,
-            num_cores = num_cores,
-            max_mem_gb = max_mem_gb,
-            num_hosts = num_hosts,
-            submit_time = submit_time,
-            start_time = start_time,
-            finish_time = finish_time,
-            timelimit = timelimit,
-            # Optional fields
-            ineligible_pend_time = ineligible_pend_time,
-            eligible_time = eligible_time,
-            requeue_time = requeue_time,
-            wait_time = wait_time,
-            run_time = run_time,
-
-            state = state,
-            reason = reason,
-            user = user,
-            queue = queue,
-            node_list = node_list,
-            project = project,
-            licenses = licenses,
-
-            exit_status = exit_status,
-
-            ru_inblock = ru_inblock,
-            ru_majflt = ru_majflt,
-            ru_maxrss = ru_maxrss,
-            ru_minflt = ru_minflt,
-            ru_msgrcv = ru_msgrcv,
-            ru_msgsnd = ru_msgsnd,
-            ru_nswap = ru_nswap,
-            ru_oublock = ru_oublock,
-            ru_stime = ru_stime,
-            ru_utime = ru_utime,
-            ru_ttime = ru_ttime,
-
-            resource_request = resource_request,
-        )
+        if self.MaxRSS is None:
+            # Can make an educated guess
+            if self.State == 'OUT_OF_MEMORY':
+                self.MaxRSS = self.ReqMemGB / self.AllocNodes
+            elif self.Elapsed_td < timedelta(seconds=60):
+                self.MaxRSS = 0
 
     DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
-
-    MINUTE_SECONDS = 60
-    HOUR_SECONDS = MINUTE_SECONDS * 60
-    DAY_SECONDS = HOUR_SECONDS * 24
 
     def to_dict(self) -> dict:
         d = self.__dict__.copy()
         return d
-
-    def fields(self):
-        d = self.to_dict()
-        del d['submit_time_dt']
-        del d['start_time_dt']
-        del d['finish_time_dt']
-        del d['eligible_time_dt']
-        del d['wait_time_td']
-        del d['run_time_td']
-        del d['ineligible_pend_time_td']
-        del d['requeue_time_td']
-        del d['timelimit_dt']
-        return d.keys()
 
     @staticmethod
     def fix_datetime(value):
@@ -370,12 +227,12 @@ class SchedulerJobInfo:
             return (None, None)
         dt_str = None
         dt = None
-        if str(type(value)) == "<class 'int'>":
+        if isinstance(value, int):
             # LSF provides a value of -1 to mean None. Otherwise seconds since the epoch.
             if value == -1:
                 return (None, None)
             dt = timestamp_to_datetime(value)
-        elif str(type(value)) == "<class 'str'>":
+        elif isinstance(value, str):
             if re.match(r'^\s*$', value) or value == '-1':
                 return (None, None)
             # Check if integer passed with wrong type
@@ -421,14 +278,14 @@ class SchedulerJobInfo:
         Returns:
             tuple(str, timedelta): tuple with time formatted as `[DD-[HH:]]MM:SS` and corresponding timedelta object
         '''
-        if duration == None:
+        if duration is None:
             return (None, None)
-        if str(type(duration)) == "<class 'int'>" or str(type(duration)) == "<class 'float'>":
+        if isinstance(duration, (int, float)):
             if duration == -1:
                 return (None, None)
             seconds = float(duration)
             td = timedelta(seconds=seconds)
-        elif str(type(duration)) == "<class 'str'>":
+        elif isinstance(duration, str):
             # Check if integer or float passed as a string
             try:
                 duration_int = int(duration)
@@ -452,116 +309,33 @@ class SchedulerJobInfo:
             duration_str = timedelta_to_string(td)
         return (duration_str, td)
 
-    @staticmethod
-    def fix_int(value):
-        '''
-        Fix an integer arg
-
-        Args:
-            value (None | str | int | float): Value that should be converted to an integer or None.
-        Returns:
-            int|None: Returns None if value is None or an empty string.
-        '''
-        if value == None:
-            return None
-        if str(type(value)) == "<class 'int'>":
-            return value
-        if str(type(value)) == "<class 'str'>":
-            if value in ['', 'None']:
-                return None
-        elif str(type(value)) != "<class 'float'>":
-            raise ValueError(f"Invalid type for value: {value} has type '{type(value)}', expected int, float, or str")
-        return int(float(value))
-
-    @staticmethod
-    def fix_float(value):
-        '''
-        Fix a float arg
-
-        Args:
-            value (None | str | int | float): Value that should be converted to a float or None.
-        Returns:
-            float|None: Returns None if value is None or an empty string.
-        '''
-        if value == None:
-            return None
-        if str(type(value)) == "<class 'float'>":
-            return value
-        if str(type(value)) == "<class 'str'>":
-            if value in ['', 'None']:
-                return None
-        else:
-            raise ValueError(f"Invalid type for value: {value} has type '{type(value)}', expected float or str")
-        return float(value)
-
-
 def timestamp_to_datetime(timestamp) -> datetime:
-    '''
-    Convert timestamp to a datetime object.
-
-    Args:
-        timestamp (int or float): Timestamp representing the number of seconds since the epoch.
-
-    Raises:
-        ValueError: If timestamp is the wrong type or can't be converted to a datetime object.
-
-    Returns:
-        datetime.datetime: The timestamp converted to a datetime object.
-    '''
-    if timestamp == None:
+    if timestamp is None:
         return timestamp
-    if str(type(timestamp)) not in ["<class 'int'>", "<class 'float'>"]:
+    if not isinstance(timestamp, (int, float)):
         raise ValueError(f"Invalid type for timestamp: {timestamp} has type '{type(timestamp)}', expected int or float")
     return datetime.fromtimestamp(timestamp, tz=timezone.utc)
 
 def str_to_datetime(string_value: str) -> datetime:
-    '''
-    Convert an ISO format DateTime string to a datetime.datetime object.
-
-    Args:
-        string_value: ISO format TimeDate: `YYYY-MM-DDTHH:MM::SS`
-
-    Raises:
-        ValueError: if string_value is in the wrong format or type.
-
-    Returns:
-        datetime.datetime: datetime object created from the string.
-    '''
-    if str(type(string_value)) != "<class 'str'>":
+    if not isinstance(string_value, str):
         raise ValueError(f"Invalid type for string_value: {string_value} has type '{type(string_value)}', expected str")
     if string_value in ['Unknown', 'None']:
         return None
+
+    date_pattern = r'^\d{4}-\d{2}-\d{2}$'
+    match = re.search(date_pattern, string_value)
+    if match:
+        string_value += "T00:00:00"
+
     return datetime.strptime(string_value, SchedulerJobInfo.DATETIME_FORMAT).replace(tzinfo=timezone.utc)
 
 def datetime_to_str(dt: datetime) -> str:
-    '''
-    Convert a datetime.datetime object to an ISO format string.
-
-    Args:
-        dt: datetime.datetime object
-
-    Raises:
-        AttributeError: If `dt` is not a datetime object
-    Returns:
-    '''
-    if str(type(dt)) != "<class 'datetime.datetime'>":
+    if not isinstance(dt, datetime):
         raise ValueError(f"Invalid type for dt: {dt} has type '{type(dt)}', expected datetime")
     return dt.strftime(SchedulerJobInfo.DATETIME_FORMAT)
 
 def str_to_timedelta(string_value: str) -> timedelta:
-    '''
-    Convert a str representing a timedelta to a datetime.timedelta object.
-
-    Args:
-        string_value: Duration should be of the following format: [DD-[HH:]]MM:SS
-
-    Raises:
-        ValueError: If `string_value` is not a str.
-
-    Returns:
-        datetime.timedelta: A timedelta object
-    '''
-    if str(type(string_value)) != "<class 'str'>":
+    if not isinstance(string_value, str):
         raise ValueError(f"Invalid type for string_value: {string_value} has type '{type(string_value)}', expected str")
 
     if string_value == 'UNLIMITED':
@@ -572,8 +346,7 @@ def str_to_timedelta(string_value: str) -> timedelta:
     values = string_value.split(':')
     seconds = float(values.pop())
     minutes = int(values.pop())
-    hours = 0
-    days = 0
+    hours, days = 0, 0
     if values:
         values = values.pop().split('-')
         hours = int(values.pop())
@@ -582,25 +355,12 @@ def str_to_timedelta(string_value: str) -> timedelta:
     return timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
 
 def timedelta_to_string(td: timedelta) -> str:
-    '''
-    Convert a datetime.timedelta object to a duration string.
-
-    Args:
-        td: datetime.timedelta object
-
-    Raises:
-        AttributeError: If `td` is not a datetime.timedelta object
-    Returns:
-        str: Duration in the following format: [DD-[HH:]]MM:SS
-    '''
-    if str(type(td)) != "<class 'datetime.timedelta'>":
+    if not isinstance(td, timedelta):
         raise ValueError(f"Invalid type for td: {td} has type '{type(td)}', expected datetime")
-    s = ''
-    seconds = td.total_seconds()
-    days = int(seconds / SchedulerJobInfo.DAY_SECONDS)
-    seconds = seconds - (days * SchedulerJobInfo.DAY_SECONDS)
-    td = td - timedelta(days=days)
+    days, seconds = td.days, td.seconds
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
     if days:
-        s += f"{days:02}-"
-    s += f"{str(td)}"
-    return s
+        return f"{days:02d}-{hours:02d}:{minutes:02d}:{seconds:02d}"
+    else:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"

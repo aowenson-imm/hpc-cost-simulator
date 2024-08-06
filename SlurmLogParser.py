@@ -1,22 +1,9 @@
-#!/usr/bin/env python3
-'''
-Parse Slurm logfiles out write job information to a csv file.
-'''
-
-import argparse
 import json
 import logging
 from MemoryUtils import mem_string_to_float, mem_string_to_int, MEM_GB
-from os import environ, makedirs, path, remove
-from os.path import dirname, realpath
+from os import path, remove
 import re
-from SchedulerJobInfo import logger as SchedulerJobInfo_logger, SchedulerJobInfo, str_to_datetime, str_to_timedelta
-from SchedulerLogParser import logger as SchedulerLogParser_logger, SchedulerLogParser
-import subprocess # nosec
-from subprocess import CalledProcessError, check_output # nosec
-from sys import exit
-from textwrap import dedent
-from VersionCheck import logger as VersionCheck_logger, VersionCheck
+from SchedulerJobInfo import SchedulerJobInfo, str_to_datetime, str_to_timedelta
 
 logger = logging.getLogger(__file__)
 logger_formatter = logging.Formatter('%(levelname)s:%(asctime)s: %(message)s')
@@ -26,44 +13,29 @@ logger.addHandler(logger_streamHandler)
 logger.setLevel(logging.INFO)
 logger.propagate = False
 
-def camel2snake(x):
-    # Convert Slurm camel-case field names to our snake-case
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', x)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
-
-class SlurmLogParser(SchedulerLogParser):
+class SlurmLogParser():
     '''
     Parse Slurm sacct output to get job completion information.
     '''
 
-    def __init__(self, sacct_input_file: str=None, sacct_output_file: str=None, output_csv: str=None, starttime: str=None, endtime: str=None):
+    def __init__(self, sacct_input_file: str, starttime: str=None, endtime: str=None):
         '''
         Constructor
 
         Args:
             sacct_input_file (str): File with the output of sacct so can process sacct output offline.
-            sacct_output_file (str): File where sacct output will be written. Can be used to process job data on another machine without sacct access.
-            output_csv (str): CSV file where parsed jobs will be written.
             starttime (str): Select jobs after the specified time
             endtime (str): Select jobs after the specified time
         Raises:
             FileNotFoundError: If sacct_input_file doesn't exist.
         '''
-        super().__init__(None, output_csv, starttime, endtime)
 
         self._sacct_input_file = sacct_input_file
-        self._sacct_output_file = sacct_output_file
+        self._starttime = starttime
+        self._endtime = endtime
 
-        if sacct_input_file and sacct_output_file:
-            raise ValueError(f"Cannot specify sacct_input_file and sacct_output_file.")
-        if not(sacct_input_file or sacct_output_file):
-            raise ValueError(f"Must specify either sacct_input_file or sacct_output_file")
-        if sacct_input_file and not path.exists(sacct_input_file):
+        if not path.exists(sacct_input_file):
             raise FileNotFoundError(f"sacct_input_file doesn't exist: {sacct_input_file}")
-        if sacct_output_file:
-            sacct_output_dir = dirname(realpath(sacct_output_file))
-            if not path.exists(sacct_output_dir):
-                makedirs(sacct_output_dir)
 
         self._sacct_input_file_has_header = False
         try:
@@ -91,7 +63,19 @@ class SlurmLogParser(SchedulerLogParser):
         self._eof = False
         self._parsed_lines = []
 
+        if self._starttime:
+            self._starttime_dt = str_to_datetime(self._starttime)
+        else:
+            self._starttime_dt = None
+        if self._endtime:
+            self._endtime_dt = str_to_datetime(self._endtime)
+        else:
+            self._endtime_dt = None
+
+        self.total_jobs_outside_time_window = 0
+
     SLURM_ACCT_FIELDS = [
+        #(Name, Type, Empty allowed?)
         ('State', 's'),            # Displays the job status, or state. Put this first so can skip ignored states.
         ('JobID', 's'),            # The identification number of the job or job step
         # Job properties
@@ -126,9 +110,7 @@ class SlurmLogParser(SchedulerLogParser):
         ('SystemCPU', 'td', True),    # The amount of system CPU time used by the job or job step. Format is the same as Elapsed
         ('TotalCPU', 'td', True),     # The sum of the SystemCPU and UserCPU time used by the job or job step
 
-        # This field was added, so it should be optional
         ('Partition', 's'),       # The exit code returned by the job script or salloc
-
         ('User', 's'),            # User that submitted job
     ]
 
@@ -159,35 +141,6 @@ class SlurmLogParser(SchedulerLogParser):
         'REVOKED',
     ]
 
-    def parse_jobs(self) -> bool:
-        '''
-        Parse all the jobs from the Slurm sacct command.
-
-        Returns:
-            bool: Return True if no errors
-        '''
-        self._parsed_lines = []
-        self.errors = []
-
-        if self._sacct_input_file_has_header:
-            # Discard first line of input file.
-            if not self._sacct_fh:
-                self._sacct_fh = open(self._sacct_input_file, 'r')
-                self._eof = False
-            line = self._sacct_fh.readline()
-
-        job = True
-        while job:
-            job = self.parse_job()
-            if job:
-                if self._output_csv_fh:
-                    self.write_job_to_csv(job)
-        logger.info(f"Parsed {self.num_output_jobs()} jobs")
-        if self.errors:
-            logger.error(f"{len(self.errors)} errors while parsing jobs")
-            return False
-        return True
-
     def parse_jobs_to_dict(self) -> dict:
         '''
         Parse all the jobs from the Slurm sacct command.
@@ -203,7 +156,7 @@ class SlurmLogParser(SchedulerLogParser):
             if not self._sacct_fh:
                 self._sacct_fh = open(self._sacct_input_file, 'r')
                 self._eof = False
-            line = self._sacct_fh.readline()
+            self._sacct_fh.readline()
 
         # Use JobID as index
         jobs_dict = {}
@@ -213,12 +166,14 @@ class SlurmLogParser(SchedulerLogParser):
             job = self.parse_job()
             if job:
                 jd = job.to_dict()
-                idx = jd['job_id'] ; del jd['job_id']
+                idx = jd['JobID'] ; del jd['JobID']
                 jobs_dict[idx] = jd
         logger.info(f"Parsed {len(jobs_dict)} jobs")
         if self.errors:
             logger.error(f"{len(self.errors)} errors while parsing jobs")
             return None
+        # if self.total_jobs_outside_time_window > 0:
+        #     print(f"{self.total_jobs_outside_time_window} skipped because not inside window")
         return jobs_dict
 
     def parse_job(self):
@@ -255,45 +210,6 @@ class SlurmLogParser(SchedulerLogParser):
             if job:
                 return job
         return None
-
-    @staticmethod
-    def get_sacct_command_args(starttime: str, endtime: str):
-        format_fields = []
-        for field_tuple in SlurmLogParser.SLURM_ACCT_FIELDS:
-            format_fields.append(field_tuple[0])
-        args = ["sacct", '--allusers', '--parsable2', '--noheader', '--format', ','.join(format_fields)]
-        if not starttime:
-            starttime = '1970-01-01T0:00:00'
-        args.extend(['--starttime', starttime])
-        if endtime:
-            args.extend(['--endtime', endtime])
-        return args
-
-    @staticmethod
-    def get_sacct_command(starttime: str, endtime: str):
-        command = ' '.join(SlurmLogParser.get_sacct_command_args(starttime, endtime))
-        return command
-
-    def _call_sacct(self):
-        '''
-        Call sacct to get job information.
-
-        Saves the output to a file and sets to the file.
-        '''
-        if self._sacct_input_file:
-            raise RuntimeError("Cannot call _call_sacct when sacct_input_file given for input")
-
-        # Create a file handle to write the sacct output to.
-        sacct_write_fh = open(self._sacct_output_file, 'w')
-
-        logger.debug(f"Calling sacct")
-        args = self.get_sacct_command_args(self._starttime, self._endtime)
-        rc = subprocess.call(args, stdout=sacct_write_fh, stderr=subprocess.STDOUT, encoding='UTF-8') # nosec
-        sacct_write_fh.close()
-        if rc:
-            logger.error(f"sacct failed with rc={rc}. See {self._sacct_output_file}")
-            exit(1)
-        self._sacct_input_file = self._sacct_output_file
 
     def _parse_line(self, line):
         '''
@@ -398,10 +314,9 @@ class SlurmLogParser(SchedulerLogParser):
             if req_mem_suffix == 'c' and (job_fields['NCPUS'] > 1):
                 job_fields['ReqMem'] *= job_fields['NCPUS']
 
-        # TODO: Add an option to add a ReqMem if one not specified. For now leave it blank or 0.
-        # if job_fields['ReqMem'] == 0 and job_fields['MaxRSS']:
-        #     logger.debug(f"No memory request for job {job_fields['JobID']} so using MaxRSS")
-        #     job_fields['ReqMem'] = round(job_fields['MaxRSS'] * job_fields['AllocNodes'] * 1.10)
+        if job_fields['ReqMem'] == 0 and job_fields['MaxRSS']:
+            logger.debug(f"No memory request for job {job_fields['JobID']} so using MaxRSS")
+            job_fields['ReqMem'] = round(job_fields['MaxRSS'] * job_fields['AllocNodes'] * 1.10)
 
         return (job_id, job_fields, self._line_number, field_errors)
 
@@ -428,7 +343,7 @@ class SlurmLogParser(SchedulerLogParser):
             # Update fields. Don't overwrite with .update or else blank fields will overwrite non-blank fields.
             (job_id, next_job_fields, last_line_number, next_field_errors) = self._parsed_lines.pop(0)
             field_errors += next_field_errors
-            logger.debug(f"    Updating job_fields")
+            logger.debug("    Updating job_fields")
             for field_tuple in self.SLURM_ACCT_FIELDS:
                 field_name = field_tuple[0]
                 if next_job_fields.get(field_name, None):   
@@ -470,6 +385,7 @@ class SlurmLogParser(SchedulerLogParser):
 
         # Check if it is in the starttime - endtime window.
         # This is for the case where we are parsing the output from a previous call to sacct.
+        # - a job with submit inside window, but started outside, will have incomplete information.
         if not self._job_in_time_window(job):
             logger.debug("    Skipping because not in time window")
             self.total_jobs_outside_time_window += 1
@@ -494,35 +410,6 @@ class SlurmLogParser(SchedulerLogParser):
             job_fields['ReqMemGB'] = job_fields.get('ReqMem')
         del job_fields['ReqMem']
 
-        if job_fields.get('ExitCode') is not None:
-            job_fields['ExitStatus'] = exit_status
-            del job_fields['ExitCode']
-        else:
-            exit_status = None
-
-        job_fields = {camel2snake(k):job_fields[k] for k in job_fields}
-        sacct_renames={ 'ncpus': 'num_cores',
-                        'alloc_nodes': 'num_hosts',
-                        'submit': 'submit_time',
-                        'eligible': 'eligible_time',
-                        'start': 'start_time',
-                        'elapsed': 'run_time',
-                        'end': 'finish_time',
-                        'partition': 'queue',
-                        'req_mem_gb': 'max_mem_gb',
-                        'max_disk_read': 'ru_inblock',
-                        'max_disk_write': 'ru_oublock',
-                        'max_pages': 'ru_majflt',
-                        'max_rss': 'ru_minflt',
-                        'system_cpu': 'ru_stime',
-                        'user_cpu': 'ru_utime',
-                        'total_cpu': 'ru_ttime',
-                        'constraints': 'resource_requests'
-        }
-        for k,v in list(job_fields.items()):
-            if k in sacct_renames:
-                job_fields[sacct_renames[k]] = v
-                del job_fields[k]
         job = SchedulerJobInfo(**job_fields)
 
         return job
@@ -536,98 +423,52 @@ class SlurmLogParser(SchedulerLogParser):
             remove(self._sacct_output_file)
 
     @staticmethod
-    def _slurm_mem_string_to_int(string_value: str) -> float:
+    def _slurm_mem_string_to_int(value: str) -> float:
         '''
-        Slurm can add a 'c' or 'n' at the end of the ReqMem field to indicate if the memory request is per node or per core.
-        For per core requests then the request must be multiplied by the number of cores.
+        Slurm can add suffix 'c' or 'n' to ReqMem field to indicate if the memory request is per-node or per-core.
+        For per-core requests then the request must be multiplied by #cores.
 
         Args:
-            string_value (str): String value
+            value (str): String value
         Returns:
-            (float, str): Tuple with the memory value as bytes and a 'c' or 'n' to indicate if the value is per node or per core.
+            (float, str): Tuple with the memory value as bytes and the 'c' or 'n' suffix.
         '''
-        if not string_value:
+        if not value:
             raise ValueError("Empty string cannot be converted to int")
-        if string_value[-1] in ['c', 'n']:
-            suffix = string_value[-1]
-            string_value = string_value[0:-1]
+        if value[-1] in ['c', 'n']:
+            suffix = value[-1]
+            value = value[0:-1]
         else:
             suffix = ''
-        value = mem_string_to_int(string_value)
+        value = mem_string_to_int(value)
         return (value, suffix)
 
-def main():
-    parser = argparse.ArgumentParser(description="Parse Slurm logs.", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    slurm_mutex_group = parser.add_mutually_exclusive_group(required=True)
-    slurm_mutex_group.add_argument("--show-data-collection-cmd", action='store_const', const=True, default=False, help="Show the command to create SACCT_OUTPUT_FILE.")
-    slurm_mutex_group.add_argument("--sacct-output-file", help="File where the output of sacct will be written. Cannot be used with --sacct-input-file. Required if --sacct-input-file not set.")
-    slurm_mutex_group.add_argument("--sacct-input-file", help="File with the output of sacct so can process sacct output offline. Cannot be used with --sacct-output-file. Required if --sacct-output-file not set.")
-    parser.add_argument("--output-csv", required=False, help="CSV file with parsed job completion records")
-    parser.add_argument("--slurm-root", required=False, help="Directory that contains the Slurm bin directory.")
-    parser.add_argument("--starttime", help="Select jobs after the specified time. Format YYYY-MM-DDTHH:MM:SS")
-    parser.add_argument("--endtime", help="Select jobs before the specified time. Format YYYY-MM-DDTHH:MM:SS")
-    parser.add_argument("--disable-version-check", action='store_const', const=True, default=False, help="Disable git version check")
-    parser.add_argument("--debug", '-d', action='store_const', const=True, default=False, help="Enable debug mode")
-    args = parser.parse_args()
+    def _job_in_time_window(self, job: SchedulerJobInfo) -> bool:
+        '''
+        Check if the job is inside the time window. Exclude jobs not entirely within window, 
+        particularly after window, because sacct won't have returned complete information
 
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-        SchedulerJobInfo_logger.setLevel(logging.DEBUG)
-        SchedulerLogParser_logger.setLevel(logging.DEBUG)
-        VersionCheck_logger.setLevel(logging.DEBUG)
+        Args:
+            job_fields (SchedulerJobInfo): Job fields
+        Returns:
+            bool: True if the job was active in the time window.
+        '''
 
-    if not args.disable_version_check and not VersionCheck().check_git_version():
-        exit(1)
+        in_time_window = True
+        if self._starttime:
+            if job.Submit_dt < self._starttime_dt and job.End_dt < self._starttime_dt:
+                in_time_window = False
+                logger.debug(f"Skipping {job.JobID}: submit {job.Submit} & finish {job.End} are before window start {self._starttime}")
 
+            elif job.Submit_dt >= self._starttime_dt and job.Submit_dt < self._endtime_dt and job.Start_dt >= self._endtime_dt:
+                # sacct won't have complete job information if it started after window
+                logger.debug(f"Skipping {job.JobID}: submit {job.Submit} inside window but start {job.Start} after window end")
+                in_time_window = False
 
-    if args.show_data_collection_cmd:
-        print(dedent(f"""\
-            Run the following command to save the job information to a file:
+        if self._endtime and in_time_window:
+            if job.Submit_dt > self._endtime_dt and job.End_dt > self._endtime_dt:
+                in_time_window = False
+                logger.debug(f"Skipping {job.JobID}: submit {job.Submit} & finish {job.End} are after window end {self._endtime}")
 
-                {SlurmLogParser.get_sacct_command(args.starttime, args.endtime)} > OUTPUT_FILE
+        return in_time_window
 
-            Then you can parse OUTPUT_FILE using the following command:
-
-                {__file__} --sacct-input-file OUTPUT_FILE --output-csv OUTPUT_CSV
-        """))
-        exit(0)
-
-    if not (args.sacct_output_file or args.sacct_input_file):
-        logger.error("one of the arguments --sacct-output-file --sacct-input-file is required")
-        exit(1)
-
-    if not args.output_csv:
-        logger.error("the following arguments are required: --output-csv")
-        exit(1)
-
-    logger.info('Started Slurm log parser')
-
-    if args.slurm_root:
-        if not path.exists(args.slurm_root):
-            logger.error(f"Slurm root dir {args.slurm_root} doesn't exist.")
-            exit(1)
-        logger.info(f"Adding {args.slurm_root}/bin to PATH")
-        environ['PATH'] = f"{args.slurm_root}/bin:{environ['PATH']}"
-
-    if args.sacct_input_file:
-        if not path.exists(args.sacct_input_file):
-            logger.error(f"Sacct file doesn't exist: {args.sacct_input_file}")
-            exit(1)
-        logger.info(f"Slurm job data will be read from {args.sacct_input_file} instead of calling sacct.")
-    else:
-        try:
-            check_output(["squeue"], stderr=subprocess.STDOUT, encoding='UTF-8') # nosec
-        except (CalledProcessError, FileNotFoundError) as e:
-            if args.slurm_root:
-                logger.error(f"The specified --slurm-root {args.slurm_root} is incorrect.")
-                exit(1)
-            else:
-                logger.error(f"You must specify --slurm-root or configure your environment so slurm is in the path or provide --sacct-file.")
-            exit(1)
-        logger.info(f"Slurm job data will be written to {args.sacct_output_file}")
-    slurmLogParser = SlurmLogParser(args.sacct_input_file, args.sacct_output_file, args.output_csv, args.starttime, args.endtime)
-    if not slurmLogParser.parse_jobs():
-        exit(2)
-
-if __name__ == '__main__':
-    main()
