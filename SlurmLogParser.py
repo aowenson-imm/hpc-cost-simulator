@@ -171,7 +171,6 @@ class SlurmLogParser():
         logger.info(f"Parsed {len(jobs_dict)} jobs")
         if self.errors:
             logger.error(f"{len(self.errors)} errors while parsing jobs")
-            return None
         # if self.total_jobs_outside_time_window > 0:
         #     print(f"{self.total_jobs_outside_time_window} skipped because not inside window")
         return jobs_dict
