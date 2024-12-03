@@ -291,6 +291,9 @@ class SlurmLogParser():
 
         if 'JobID' not in job_fields:
             return None
+        if 'AllocNodes' not in job_fields or 'ReqMem' not in job_fields:
+            # Major parse fail
+            return None
         job_fields['JobID'] = job_fields['JobID'].replace('.batch', '')
         job_fields['JobID'] = job_fields['JobID'].replace('.extern', '')
         job_fields['JobID'] = job_fields['JobID'].replace('.interactive', '')
